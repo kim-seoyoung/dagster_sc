@@ -2,7 +2,7 @@ import os
 import dagster as dg
 
 import sys
-sys.path.append('src/sc/process')
+sys.path.append('/home/sy/sy/sc/src/sc')
 from process import process_yolov8_dataset
 
 # 동적 파티션 정의: 세션 폴더명을 파티션 키로 사용
@@ -29,7 +29,7 @@ def raw_radar_data(context: dg.AssetExecutionContext):
 
 @dg.asset(
     partitions_def=session_partitions,
-    code_version="v1"  # 크롭 영역(좌표)을 변경하게 되면 이 값을 "v2"로 올리세요!
+    code_version="v2" 
 )
 def cropped_image_data(context: dg.AssetExecutionContext, raw_image_data):
     session_id = context.partition_key
