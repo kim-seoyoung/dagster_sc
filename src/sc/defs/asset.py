@@ -1,6 +1,9 @@
 import os
 import dagster as dg
-import shutil
+
+import sys
+sys.path.append('src/sc/process')
+from process import process_yolov8_dataset
 
 # 동적 파티션 정의: 세션 폴더명을 파티션 키로 사용
 session_partitions = dg.DynamicPartitionsDefinition(name="sessions")
@@ -48,17 +51,9 @@ def cropped_image_data(context: dg.AssetExecutionContext, raw_image_data):
         out_file = os.path.join(output_path, file_name)
         
         # --- [실제 크롭 로직 시작] ---
-        # 1. OpenCV를 사용하는 경우 (주석 해제 후 사용)
-        # img = cv2.imread(in_file)
-        # if img is not None:
-        #     # 예: 세로 100~500, 가로 200~800 영역 크롭 [y1:y2, x1:x2]
-        #     cropped_img = img[100:500, 200:800] 
-        #     cv2.imwrite(out_file, cropped_img)
-        #     processed_count += 1
-        
-        # 2. 크롭 로직 작성 전, 테스트를 위해 단순 복사만 해보려면 아래 코드 사용
-        shutil.copy(in_file, out_file)
-        processed_count += 1
+        save_count = process_yolov8_dataset(input_path, input_path,
+                                             output_path, context)
+        processed_count += save_count
         # --- [실제 크롭 로직 끝] ---
 
     context.log.info(f"[{session_id}] 이미지 {processed_count}장 크롭 완료. 저장 경로: {output_path}")
