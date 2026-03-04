@@ -2,7 +2,7 @@ import os
 import dagster as dg
 
 import sys
-sys.path.append('/home/sy/sy/sc/src/sc')
+sys.path.append('/home/sy/sy/cls_data/src/cls_data')
 from process import process_yolov8_dataset
 
 # 동적 파티션 정의: 세션 폴더명을 파티션 키로 사용

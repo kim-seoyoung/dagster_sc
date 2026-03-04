@@ -1,9 +1,13 @@
 import os
+import json
 import subprocess
 import dagster as dg
 from dagster import AssetIn, Config, Dict
 from pydantic import Field
 from .assets import cropped_image_data, session_partitions
+
+from ..process.create_dataset_splits import create_dataset_splits
+
 
 # -------------------------------------------------------------------
 #  Model Training Asset Patterns
@@ -29,10 +33,19 @@ class SelectiveTrainingConfig(Config):
         default="selective_model.pt",
         description="The name for the output model file."
     )
+    batch_size: int = Field(
+        default=8,
+        description="Batch size for training."
+    )
+    num_epochs: int = Field(
+        default=10,
+        description="Number of training epochs."
+    )
 
 @dg.asset(
     compute_kind="pytorch",
     ins={"cropped_image_data": dg.AssetIn(dagster_type=Dict)},
+    code_version='v1'
 )
 def efficientnetv2(context: dg.AssetExecutionContext, config: SelectiveTrainingConfig, cropped_image_data: dict):
     """
@@ -50,6 +63,8 @@ def efficientnetv2(context: dg.AssetExecutionContext, config: SelectiveTrainingC
           model_name: "my_special_model.pt"
 
     """
+    version = context.assets_def.code_version_by_key[context.asset_key]
+    asset_name = context.asset_key.path[-1]
     selected_session_ids = config.session_ids
     model_name = config.model_name
     
@@ -67,25 +82,25 @@ def efficientnetv2(context: dg.AssetExecutionContext, config: SelectiveTrainingC
     if not selected_data_paths:
         context.log.warning("No valid data partitions found for the selected session IDs. Skipping training.")
         return
-
-    # --- [Paths] ---
-    # TODO: Replace this with the actual path to your training script.
-    # This script must be able to accept a comma-separated list of data paths.
-    training_script_path = "/home/sy/sy/sc/train_selective_model.sh"
     
-    # Define where the trained model will be saved.
-    output_model_dir = os.path.join("models", "selective")
-    os.makedirs(output_model_dir, exist_ok=True)
-    output_model_path = os.path.join(output_model_dir, model_name)
+    output_dir = os.path.join("./model", asset_name, version)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    create_dataset_splits(selected_data_paths, output_dir, train_ratio=0.7, val_ratio=0.1, test_ratio=0.2)
+
+    training_script_path = "/home/sy/sy/simple_classification/run_main.sh"
+    
+    output_model_path = os.path.join(output_dir, asset_name, version)
     
     # --- [Build Command] ---
     command = [
         "bash",
         training_script_path,
-        "--data_path", # Changed from --data_dir to --data_path
-        ",".join(selected_data_paths),
-        "--model_output_path",
-        output_model_path,
+        "--data_dir", output_dir,
+        "--save_dir", output_model_path,
+        "--model_type", "efficientnet_v2_s",
+        "--batch_size", str(config.batch_size),
+        "--epochs", str(config.num_epochs)
     ]
     
     context.log.info(f"Running selective training command: {' '.join(command)}")
@@ -107,10 +122,23 @@ def efficientnetv2(context: dg.AssetExecutionContext, config: SelectiveTrainingC
 
     context.log.info(f"Selective model training complete. Model saved to: {output_model_path}")
 
-    context.add_output_metadata({
+    metadata = {
         "model_path": output_model_path,
         "source_sessions": selected_session_ids,
-    })
+        "version": version
+    }
+
+    metrics_path = os.path.join(output_model_path, "metrics.json")
+    if os.path.exists(metrics_path):
+        try:
+            with open(metrics_path, "r") as f:
+                metrics = json.load(f)
+            metadata.update(metrics)
+            context.log.info(f"Loaded metrics from {metrics_path}")
+        except Exception as e:
+            context.log.error(f"Failed to load metrics from {metrics_path}: {e}")
+
+    context.add_output_metadata(metadata)
 
     return {
         "type": "EfficientNetV2",
