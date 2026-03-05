@@ -63,7 +63,7 @@ def efficientnetv2(context: dg.AssetExecutionContext, config: SelectiveTrainingC
           model_name: "my_special_model.pt"
 
     """
-    version = context.assets_def.code_version_by_key[context.asset_key]
+    version = context.assets_def.code_versions_by_key[context.asset_key]
     asset_name = context.asset_key.path[-1]
     selected_session_ids = config.session_ids
     model_name = config.model_name
