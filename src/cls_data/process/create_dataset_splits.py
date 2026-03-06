@@ -51,7 +51,7 @@ def create_dataset_splits(data_dirs, output_dir, train_ratio=0.7, val_ratio=0.15
                 
             for img_path in class_dir.glob('*'):
                 if img_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.bmp', '.gif']:
-                    image_paths.append((img_path, class_to_idx[class_name], d_path.parent))
+                    image_paths.append((img_path, class_to_idx[class_name], d_path.parent.parent))
 
     random.shuffle(image_paths)
 

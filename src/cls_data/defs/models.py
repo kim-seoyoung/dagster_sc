@@ -71,39 +71,27 @@ def efficientnetv2(context: dg.AssetExecutionContext, config: SelectiveTrainingC
     # Collect paths from the selected partitions
     selected_data_paths = []
     for raw_session_id in selected_session_ids:
-        session_id = int(raw_session_id.strip("[]'\" "))
+        session_id = int(raw_session_id.strip("[]'\" "))6
         
         if session_id in cropped_image_data:
             selected_data_paths.append(cropped_image_data[session_id]["path"])
         else:
-            # Fallback to checking ./data folder directly
-            fallback_paths = [
-                os.path.join("./data/processed/cropped_images", version, session_id),
-                os.path.join("./data/processed/v2", session_id),
-                os.path.join("./data/processed/v1", session_id)
-            ]
-            
-            found = False
-            for p in fallback_paths:
-                if os.path.exists(p):
-                    selected_data_paths.append(p)
-                    found = True
-                    break
-                    
-            if not found:
-                context.log.warning(
-                    f"Session ID '{session_id}' provided in config was not found in upstream "
-                    f"asset partitions or local data folders. Skipping."
-                )
+            context.log.warning(
+                f"Session ID '{session_id}' provided in config was not found in upstream "
+                f"asset partitions or local data folders. Skipping."
+            )
 
     if not selected_data_paths:
         context.log.warning("No valid data partitions found for the selected session IDs. Skipping training.")
         return
     
     output_dir = os.path.join("./model", asset_name, version)
-    os.makedirs(output_dir, exist_ok=True)
+    if os.path.exists(output_dir):
+        context.log.warning(f"Output directory '{output_dir}' already exists. Skipping training."))
+    else:
+        os.makedirs(output_dir, exist_ok=True)
     
-    create_dataset_splits(selected_data_paths, output_dir, train_ratio=0.7, val_ratio=0.1, test_ratio=0.2)
+        create_dataset_splits(selected_data_paths, output_dir, train_ratio=0.7, val_ratio=0.1, test_ratio=0.2)
 
     training_script_path = "/home/sy/sy/simple_classification/run_main.sh"
     
@@ -113,7 +101,8 @@ def efficientnetv2(context: dg.AssetExecutionContext, config: SelectiveTrainingC
     command = [
         "bash",
         training_script_path,
-        "--data_dir", output_dir,
+        "--data_dir", "",
+        "--split_dir", output_dir,
         "--save_dir", output_model_path,
         "--model_type", "efficientnet_v2_s",
         "--batch_size", str(config.batch_size),
