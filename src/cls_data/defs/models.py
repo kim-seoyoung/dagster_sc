@@ -70,14 +70,31 @@ def efficientnetv2(context: dg.AssetExecutionContext, config: SelectiveTrainingC
     
     # Collect paths from the selected partitions
     selected_data_paths = []
-    for session_id in selected_session_ids:
+    for raw_session_id in selected_session_ids:
+        session_id = int(raw_session_id.strip("[]'\" "))
+        
         if session_id in cropped_image_data:
             selected_data_paths.append(cropped_image_data[session_id]["path"])
         else:
-            context.log.warning(
-                f"Session ID '{session_id}' provided in config was not found in upstream "
-                f"asset partitions. Skipping."
-            )
+            # Fallback to checking ./data folder directly
+            fallback_paths = [
+                os.path.join("./data/processed/cropped_images", version, session_id),
+                os.path.join("./data/processed/v2", session_id),
+                os.path.join("./data/processed/v1", session_id)
+            ]
+            
+            found = False
+            for p in fallback_paths:
+                if os.path.exists(p):
+                    selected_data_paths.append(p)
+                    found = True
+                    break
+                    
+            if not found:
+                context.log.warning(
+                    f"Session ID '{session_id}' provided in config was not found in upstream "
+                    f"asset partitions or local data folders. Skipping."
+                )
 
     if not selected_data_paths:
         context.log.warning("No valid data partitions found for the selected session IDs. Skipping training.")
