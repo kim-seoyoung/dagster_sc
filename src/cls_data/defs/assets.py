@@ -29,7 +29,7 @@ def raw_radar_data(context: dg.AssetExecutionContext):
 
 @dg.asset(
     partitions_def=session_partitions,
-    code_version="v2" 
+    code_version="v3" 
 )
 def cropped_image_data(context: dg.AssetExecutionContext, raw_image_data):
     session_id = context.partition_key
@@ -39,28 +39,34 @@ def cropped_image_data(context: dg.AssetExecutionContext, raw_image_data):
     output_path = os.path.join(PROCESSED_DATA_DIR, "cropped_images", version, session_id)
     os.makedirs(output_path, exist_ok=True)
     
-    files = os.listdir(input_path)
-    processed_count = 0
+    classes = os.listdir(input_path)
+    train_proc_count = {}
+    train_img_count = {}
+    test_proc_count = {}
+    test_img_count = {}
     
-    for file_name in files:
-        # 이미지 파일만 필터링
-        if not file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
-            continue
-            
-        in_file = os.path.join(input_path, file_name)
-        out_file = os.path.join(output_path, file_name)
+    for c in classes:
+        image_path = os.path.join(input_path, c, 'images', 'train')
+        save_count, img_count = process_yolov8_dataset(image_path, os.path.join(input_path, c, 'labels', 'train'),
+                                                       os.path.join(output_path, c, 'train'), context)
+        train_proc_count[c] = save_count
+        train_img_count[c] = img_count
         
-        # --- [실제 크롭 로직 시작] ---
-        save_count = process_yolov8_dataset(input_path, input_path,
-                                             output_path, context)
-        processed_count += save_count
-        # --- [실제 크롭 로직 끝] ---
+        image_path = os.path.join(input_path, c, 'images', 'test')
+        save_count, img_count = process_yolov8_dataset(image_path, os.path.join(input_path, c, 'labels', 'test'),
+                                                       os.path.join(output_path, c, 'test'), context)
+        test_proc_count[c] = save_count
+        test_img_count[c] = img_count
+    
+    final_count = sum(train_proc_count.values()) + sum(test_proc_count.values())
 
-    context.log.info(f"[{session_id}] 이미지 {processed_count}장 크롭 완료. 저장 경로: {output_path}")
+    context.log.info(f"[{session_id}] 이미지 {final_count}장 크롭 완료. 저장 경로: {output_path}")
     
     context.add_output_metadata({
         "source_session": session_id,
-        "processed_count": processed_count,
+        "classes": classes,
+        "train_proc_count": train_proc_count,
+        "test_proc_count": test_proc_count,
         "save_path": output_path,
         "version": version
     })
@@ -70,5 +76,7 @@ def cropped_image_data(context: dg.AssetExecutionContext, raw_image_data):
         "session": session_id,
         "type": "cropped_image",
         "path": output_path,
-        "count": processed_count
+        "classes": classes,
+        "train_proc_count": train_proc_count,
+        "test_proc_count": test_proc_count,
     }

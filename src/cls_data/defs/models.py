@@ -29,6 +29,10 @@ class SelectiveTrainingConfig(Config):
     session_ids: list[str] = Field(
         description="A list of session IDs to use for training. e.g., ['session_A', 'session_B']"
     )
+    data_version: str = Field(
+        default="v3",
+        description="The data version to use for training (e.g., 'v1', 'v2', 'v3')."
+    )
     model_name: str = Field(
         default="selective_model.pt",
         description="The name for the output model file."
@@ -66,19 +70,22 @@ def efficientnetv2(context: dg.AssetExecutionContext, config: SelectiveTrainingC
     version = context.assets_def.code_versions_by_key[context.asset_key]
     asset_name = context.asset_key.path[-1]
     selected_session_ids = config.session_ids
+    data_version = config.data_version
     model_name = config.model_name
     
     # Collect paths from the selected partitions
     selected_data_paths = []
     for raw_session_id in selected_session_ids:
-        session_id = int(raw_session_id.strip("[]'\" "))6
+        session_id = raw_session_id.strip("[]'\" ")
         
-        if session_id in cropped_image_data:
-            selected_data_paths.append(cropped_image_data[session_id]["path"])
+        expected_path = os.path.join("data", "processed", "cropped_images", data_version, session_id)
+        
+        if os.path.exists(expected_path):
+            selected_data_paths.append(expected_path)
+            context.log.debug(f"Session ID '{session_id}' added with path: {expected_path}")
         else:
             context.log.warning(
-                f"Session ID '{session_id}' provided in config was not found in upstream "
-                f"asset partitions or local data folders. Skipping."
+                f"Session ID '{session_id}' provided in config was not found at expected path: {expected_path}. Skipping."
             )
 
     if not selected_data_paths:
@@ -87,7 +94,7 @@ def efficientnetv2(context: dg.AssetExecutionContext, config: SelectiveTrainingC
     
     output_dir = os.path.join("./model", asset_name, version)
     if os.path.exists(output_dir):
-        context.log.warning(f"Output directory '{output_dir}' already exists. Skipping training."))
+        context.log.debug(f"Output directory '{output_dir}' already exists. Skipping training.")
     else:
         os.makedirs(output_dir, exist_ok=True)
     
